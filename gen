@@ -1,0 +1,53 @@
+#!/bin/bash
+
+CAKEY=./CA/myCA
+
+function generate_ca() {
+  openssl genrsa -des3 -out $CAKEY.key 2048
+  openssl req -x509 -new -nodes -key $CAKEY.key -sha256 -days 825 -out $CAKEY.pem
+}
+
+function generateSSL() {
+  # Generate a private key
+  openssl genrsa -out $DOMAIN.key 2048
+
+  # Create a certificate-signing request
+  openssl req -new -key $DOMAIN.key -out $DOMAIN.csr
+
+  # Create a config file for the extensions
+  >$DOMAIN.ext cat <<-EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = $DOMAIN
+DNS.2 = api.$DOMAIN
+EOF
+
+  #Create the signed certificate
+  openssl x509 -req -in $DOMAIN.csr -CA $CAKEY.pem -CAkey $CAKEY.key -CAcreateserial \
+  -out $DOMAIN.crt -days 825 -sha256 -extfile $DOMAIN.ext
+}
+
+# check private key
+if [ -f "$PWD/$CAKEY.key" ]; then
+    printf "Private key: $CAKEY.key exists. "
+    if [ ! -s "$PWD/$CAKEY" ]; then
+      printf "but empty.\nGenerating new one...\n\n"
+      generate_ca
+    else
+      printf "Using existed CA key.\n"
+    fi
+else 
+    printf "Private key: $CAKEY doesn't exist.\nGenerating new one...\n\n"
+    generate_ca
+fi
+
+printf "\n\n=============\n\nDomain to generate SSL ('n' to skip): "
+read DOMAIN
+if [ $DOMAIN == 'n' ]; then
+  printf "skip \n"
+else
+  generateSSL
+fi
